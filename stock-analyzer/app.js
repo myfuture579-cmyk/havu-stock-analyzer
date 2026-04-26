@@ -102,47 +102,74 @@ function initChart() {
 }
 
 async function fetchStockData(ticker) {
-    // TCBS (Techcom Securities) là API hiếm hoi nhất hiện nay vẫn đang MỞ CORS cho các trang web public.
+    // CƠ CHẾ AUTO-FALLBACK ĐA TẦNG TỐI THƯỢNG
+    // Tự động chuyển đổi giữa 3 máy chủ khác nhau nếu bị chặn CORS
     let queryTicker = ticker.toUpperCase().trim();
-    queryTicker = queryTicker.replace('.VN', '');
+    const tickerVN = queryTicker.replace('.VN', ''); // Dùng cho TCBS, DNSE
+    const tickerYahoo = queryTicker.includes('.') ? queryTicker : `${queryTicker}.VN`; // Dùng cho Yahoo
 
     const end = Math.floor(Date.now() / 1000);
     const start = end - (365 * 24 * 60 * 60); // 1 năm
 
-    // Link API public của TCBS
-    const targetUrl = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${queryTicker}&type=stock&resolution=D&from=${start}&to=${end}`;
+    // --- MÁY CHỦ 1: TCBS (Nhanh nhất) ---
+    try {
+        const resTCBS = await fetch(`https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${tickerVN}&type=stock&resolution=D&from=${start}&to=${end}`);
+        if (resTCBS.ok) {
+            const json = await resTCBS.json();
+            if (json.data && json.data.length > 0) {
+                return json.data.map(item => ({
+                    time: item.tradingDate.split('T')[0],
+                    open: item.open, high: item.high, low: item.low, close: item.close, volume: item.volume
+                })).sort((a, b) => new Date(a.time) - new Date(b.time));
+            }
+        }
+    } catch (e) { console.warn("TCBS bị chặn, chuyển sang DNSE..."); }
 
-    const response = await fetch(targetUrl);
-    if (!response.ok) throw new Error('Không thể kết nối đến máy chủ TCBS.');
-    
-    const json = await response.json();
-    const dataList = json.data;
-    
-    if (!dataList || dataList.length === 0) {
-        throw new Error(`Mã cổ phiếu "${ticker}" không tồn tại hoặc sai mã.`);
-    }
+    // --- MÁY CHỦ 2: DNSE (Dự phòng 1) ---
+    try {
+        const resDNSE = await fetch(`https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?resolution=1D&symbol=${tickerVN}&from=${start}&to=${end}`);
+        if (resDNSE.ok) {
+            const data = await resDNSE.json();
+            if (data.t && data.t.length > 0) {
+                const chartData = [];
+                for (let i = 0; i < data.t.length; i++) {
+                    if (data.o[i] == null) continue;
+                    chartData.push({
+                        time: new Date(data.t[i] * 1000).toISOString().split('T')[0],
+                        open: data.o[i], high: data.h[i], low: data.l[i], close: data.c[i], volume: data.v[i]
+                    });
+                }
+                return chartData.sort((a, b) => new Date(a.time) - new Date(b.time));
+            }
+        }
+    } catch (e) { console.warn("DNSE bị chặn, chuyển sang Codetabs..."); }
 
-    const chartData = [];
-    for (let i = 0; i < dataList.length; i++) {
-        const item = dataList[i];
-        if (item.open === null || item.close === null) continue;
-        
-        // TCBS trả về tradingDate dạng chuỗi ISO hoặc timezone, cắt lấy YYYY-MM-DD
-        const dateString = item.tradingDate.split('T')[0];
-        
-        chartData.push({
-            time: dateString,
-            open: item.open,
-            high: item.high,
-            low: item.low,
-            close: item.close,
-            volume: item.volume
-        });
-    }
+    // --- MÁY CHỦ 3: CODETABS PROXY + YAHOO FINANCE (Chấp mọi loại tường lửa) ---
+    try {
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tickerYahoo}?period1=${start}&period2=${end}&interval=1d`;
+        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`;
+        const resYahoo = await fetch(proxyUrl);
+        if (resYahoo.ok) {
+            const data = await resYahoo.json();
+            if (data.chart && data.chart.result && data.chart.result.length > 0) {
+                const result = data.chart.result[0];
+                const timestamps = result.timestamp;
+                const quotes = result.indicators.quote[0];
+                const chartData = [];
+                for (let i = 0; i < timestamps.length; i++) {
+                    if (quotes.open[i] == null) continue;
+                    chartData.push({
+                        time: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
+                        open: quotes.open[i], high: quotes.high[i], low: quotes.low[i], close: quotes.close[i], volume: quotes.volume[i]
+                    });
+                }
+                return chartData.sort((a, b) => new Date(a.time) - new Date(b.time));
+            }
+        }
+    } catch (e) { console.warn("Tất cả máy chủ đều bị chặn."); }
 
-    // Sắp xếp lại theo thời gian chuẩn
-    chartData.sort((a, b) => new Date(a.time) - new Date(b.time));
-    return chartData;
+    // Nếu cả 3 đều thất bại
+    throw new Error(`Đường truyền quốc tế và trong nước đang gặp sự cố, hoặc mã cổ phiếu "${ticker}" không tồn tại.`);
 }
 
 // Xử lý nút Tải biểu đồ
