@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Analyzer - AI & Elliott Wave</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- TradingView Lightweight Charts (Version 3.8.0 - Stable API) -->
+    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- HEADER & TOOLBAR -->
+    <header class="app-header">
+        <div class="logo">
+            <i class="fa-solid fa-chart-line"></i>
+            <h1>Stock Analyzer <span>AI Pro</span></h1>
+        </div>
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="ticker-input" placeholder="Nhập mã chứng khoán (VD: FPT, HPG, VNM)..." value="FPT">
+                <button id="btn-load-chart"><i class="fa-solid fa-magnifying-glass"></i> Tải Biểu Đồ</button>
+            </div>
+            <div class="api-box">
+                <input type="password" id="gemini-api-key" placeholder="Dán Gemini API Key vào đây...">
+                <button id="btn-save-api"><i class="fa-solid fa-key"></i> Lưu Key</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        <!-- CHART AREA -->
+        <section class="chart-section">
+            <div class="section-header">
+                <h2><i class="fa-solid fa-chart-candlestick"></i> Biểu đồ Kỹ thuật: <span id="display-ticker">FPT</span></h2>
+                <div class="legend">
+                    <span class="legend-item"><span class="color-box" style="background: #2962FF"></span> SMA 20</span>
+                    <span class="legend-item"><span class="color-box" style="background: #FF6D00"></span> SMA 50</span>
+                </div>
+            </div>
+            <div id="chart-container" class="chart-container">
+                <!-- TradingView Chart sẽ render ở đây -->
+                <div id="chart-loading" class="loading-overlay" style="display:none;">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i> Đang tải dữ liệu cổ phiếu...
+                </div>
+            </div>
+        </section>
+
+        <!-- AI ANALYSIS AREA -->
+        <section class="ai-section">
+            <div class="section-header">
+                <h2><i class="fa-solid fa-brain"></i> Nhận định AI (Sóng Elliott & MA)</h2>
+                <button id="btn-analyze-ai" class="btn-ai" disabled><i class="fa-solid fa-wand-magic-sparkles"></i> Bắt đầu Phân tích</button>
+            </div>
+            
+            <div class="ai-content-box">
+                <div id="ai-loading" class="ai-loading" style="display:none;">
+                    <div class="pulse-ring"></div>
+                    <p>AI đang đọc dữ liệu 100 phiên gần nhất và phân tích mô hình sóng...</p>
+                </div>
+                
+                <div id="ai-result" class="ai-result">
+                    <div class="welcome-message">
+                        <i class="fa-solid fa-robot"></i>
+                        <p>Nhập mã cổ phiếu, tải biểu đồ và nhấn <strong>Bắt đầu Phân tích</strong> để AI đánh giá xu hướng bằng Sóng Elliott và Giao cắt MA.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
