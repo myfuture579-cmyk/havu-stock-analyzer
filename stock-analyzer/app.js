@@ -102,14 +102,24 @@ function initChart() {
 }
 
 async function fetchStockData(ticker) {
-    // Gọi đến máy chủ ảo (Backend) của chính chúng ta trên Vercel
-    // Máy chủ ảo này sẽ lấy dữ liệu từ Yahoo Finance và trả về, né được 100% lỗi CORS
-    const url = `/api/proxy?ticker=${encodeURIComponent(ticker)}`;
+    // Phương án cuối cùng và ổn định nhất: AllOrigins kết hợp Yahoo Finance
+    // AllOrigins là máy chủ trung gian duy nhất KHÔNG CHẶN tên miền của Vercel.
+    let queryTicker = ticker.toUpperCase().trim();
+    if (!queryTicker.includes('.')) {
+        queryTicker += '.VN';
+    }
 
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Máy chủ bận, vui lòng thử lại sau.');
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - (365 * 24 * 60 * 60); // 1 năm
+
+    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?period1=${start}&period2=${end}&interval=1d`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error('Kết nối mạng yếu, vui lòng nhấn Tải Biểu Đồ lại lần nữa.');
     
-    const data = await response.json();
+    const proxyData = await response.json();
+    const data = JSON.parse(proxyData.contents);
     
     if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
         throw new Error(`Mã cổ phiếu "${ticker}" không tồn tại.`);
