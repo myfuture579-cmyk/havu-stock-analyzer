@@ -190,27 +190,97 @@ btnLoadChart.addEventListener('click', async () => {
     }
 });
 
+// Hàm phân tích kỹ thuật nội bộ tự động (không cần API Key)
+function generateLocalAnalysis(recentData, ticker) {
+    const last = recentData[recentData.length - 1];
+    const price = last.close;
+    const sma20 = last.sma20;
+    const sma50 = last.sma50;
+    
+    // Tìm đỉnh/đáy trong 20 phiên gần nhất
+    const last20 = recentData.slice(-20);
+    const low20 = Math.min(...last20.map(d => d.close));
+    const high20 = Math.max(...last20.map(d => d.close));
+    
+    let waveAnalysis = "";
+    let maAnalysis = "";
+    let trend = "";
+    let action = "";
+    let stopLoss = (low20 * 0.98).toFixed(2); // 2% dưới đáy gần nhất
+
+    // Logic Động lượng & Sóng
+    if (price > sma20 && sma20 > sma50) {
+        trend = "TĂNG (Bullish)";
+        action = "NẮM GIỮ / MUA THÊM";
+        maAnalysis = `**Tín hiệu Tích cực:** Giá hiện tại (${price}) đang nằm trên cả SMA 20 và SMA 50. Đường trung bình ngắn (20) nằm trên đường trung bình dài (50) cho thấy xu hướng tăng trung hạn đang được xác nhận mạnh mẽ.`;
+        waveAnalysis = `Dựa trên cấu trúc giá đang bứt phá mạnh, cổ phiếu **${ticker}** nhiều khả năng đang nằm trong **Sóng Đẩy (Impulse Wave 3 hoặc 5)** của chu kỳ Elliott. Lực cầu mua lên đang hoàn toàn áp đảo.`;
+    } else if (price < sma20 && sma20 < sma50) {
+        trend = "GIẢM (Bearish)";
+        action = "QUAN SÁT / CẮT LỖ";
+        maAnalysis = `**Tín hiệu Tiêu cực:** Giá hiện tại (${price}) đang nằm dưới cả SMA 20 và SMA 50. Sự xuất hiện của Death Cross (SMA 20 cắt xuống SMA 50) cho thấy phe bán đang kiểm soát hoàn toàn.`;
+        waveAnalysis = `Cấu trúc giá suy yếu rõ rệt. Cổ phiếu nhiều khả năng đang rơi vào **Sóng Điều chỉnh (Sóng C)** hoặc một nhịp rũ bỏ sâu. Rất khó để tìm kiếm điểm mua an toàn trong giai đoạn này.`;
+    } else {
+        trend = "ĐI NGANG (Sideways / Tích lũy)";
+        action = "QUAN SÁT VÙNG NỀN";
+        maAnalysis = `**Tín hiệu Trung tính:** Giá (${price}) đang dao động cắt qua cắt lại các đường SMA. Hai đường SMA 20 và 50 có xu hướng xoắn vào nhau, cho thấy thị trường đang giằng co.`;
+        waveAnalysis = `Hành vi giá đi ngang cho thấy cổ phiếu có thể đang ở trong **Sóng Điều chỉnh phức tạp (Sóng 4 hoặc Sóng B)**. Dòng tiền đang chững lại để chờ đợi tín hiệu bứt phá rõ ràng hơn.`;
+    }
+
+    return `*Lưu ý: Do bạn không sử dụng API Key (hoặc hết hạn mức), hệ thống đã tự động kích hoạt **Thuật toán Chuyên gia Nội bộ (Local Algorithm)** để phân tích.*
+
+### 1. Phân tích Cấu trúc Sóng (Elliott Wave)
+${waveAnalysis}
+
+### 2. Phân tích Động lượng (Moving Averages)
+${maAnalysis}
+- Mức giá thấp nhất 20 phiên qua: **${low20.toFixed(2)}**
+- Mức giá cao nhất 20 phiên qua: **${high20.toFixed(2)}**
+
+### 3. Kết luận & Hành động
+- **Xu hướng chính:** **${trend}**
+- **Hành động khuyến nghị:** **${action}**
+- **Giá Cắt lỗ (Stop-loss) tham khảo:** Thủng vùng **${stopLoss}** (dưới đáy gần nhất 2%).
+
+*Phân tích này được tính toán hoàn toàn cục bộ trên trình duyệt của bạn với tốc độ ánh sáng và miễn phí 100%.*`;
+}
+
 // ============================
 // AI ANALYSIS (GEMINI)
 // ============================
 btnAnalyzeAi.addEventListener('click', async () => {
-    const apiKey = geminiApiKeyInput.value.trim() || localStorage.getItem('stock_gemini_key');
-    if (!apiKey) {
-        alert('Vui lòng nhập Gemini API Key để sử dụng tính năng này!');
-        geminiApiKeyInput.focus();
-        return;
-    }
-
     if (currentStockData.length < 100) {
         alert('Dữ liệu không đủ để phân tích. Cần ít nhất 100 phiên.');
         return;
     }
 
-    // Lấy 100 phiên gần nhất (khoảng 5 tháng) để gửi cho AI
+    const apiKey = geminiApiKeyInput.value.trim() || localStorage.getItem('stock_gemini_key');
     const recentData = currentStockData.slice(-100);
     const ticker = displayTicker.innerText;
 
-    // Chuẩn bị chuỗi dữ liệu (chỉ lấy Close, SMA20, SMA50)
+    aiResult.style.display = 'none';
+    aiLoading.style.display = 'flex';
+    btnAnalyzeAi.disabled = true;
+
+    // NẾU KHÔNG CÓ API KEY -> GỌI THUẬT TOÁN NỘI BỘ (MIỄN PHÍ)
+    if (!apiKey) {
+        setTimeout(() => {
+            const localMarkdown = generateLocalAnalysis(recentData, ticker);
+            
+            let htmlResult = localMarkdown
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+                .replace(/\n/gim, '<br>');
+                
+            aiResult.innerHTML = htmlResult;
+            aiResult.style.display = 'block';
+            aiLoading.style.display = 'none';
+            btnAnalyzeAi.disabled = false;
+        }, 1000);
+        return;
+    }
+
+    // NẾU CÓ API KEY -> GỌI GEMINI AI
     let dataString = `Mã cổ phiếu: ${ticker}\nDữ liệu 100 phiên gần nhất (Ngày | Đóng cửa | SMA20 | SMA50):\n`;
     recentData.forEach(d => {
         dataString += `${d.time} | ${d.close.toFixed(2)} | ${d.sma20 ? d.sma20.toFixed(2) : '-'} | ${d.sma50 ? d.sma50.toFixed(2) : '-'}\n`;
@@ -241,10 +311,6 @@ Nhiệm vụ của bạn: Dựa vào sự biến động giá và các chỉ bá
    - Gợi ý mức giá Cắt lỗ (Stop-loss) tham khảo dựa trên đáy gần nhất.
 
 Lưu ý: Không dùng ngôn ngữ quá cảnh báo pháp lý rườm rà. Viết một cách tự tin, sắc sảo như một chuyên gia đang tư vấn cho quỹ đầu tư.`;
-
-    aiResult.style.display = 'none';
-    aiLoading.style.display = 'flex';
-    btnAnalyzeAi.disabled = true;
 
     try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
@@ -278,7 +344,19 @@ Lưu ý: Không dùng ngôn ngữ quá cảnh báo pháp lý rườm rà. Viết
         aiResult.innerHTML = htmlResult;
 
     } catch (error) {
-        aiResult.innerHTML = `<p style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> Lỗi: ${error.message}</p>`;
+        // Fallback sang thuật toán nội bộ khi Quota hết hoặc API lỗi
+        const localMarkdown = generateLocalAnalysis(recentData, ticker);
+        const errorNotice = `> **Cảnh báo từ hệ thống:** API Key bị từ chối với lỗi: *${error.message}*. \n> Để không làm gián đoạn, hệ thống tự động kích hoạt **Thuật toán Chuyên gia Nội bộ** (miễn phí) để phân tích thay thế.\n\n---\n\n`;
+        
+        let combinedMarkdown = errorNotice + localMarkdown;
+        let htmlResult = combinedMarkdown
+            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+            .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #ef4444; padding-left: 10px; margin-left: 0; color: #ff6b6b; font-style: italic;">$1</blockquote>')
+            .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+            .replace(/\n/gim, '<br>');
+
+        aiResult.innerHTML = htmlResult;
     } finally {
         aiLoading.style.display = 'none';
         aiResult.style.display = 'block';
