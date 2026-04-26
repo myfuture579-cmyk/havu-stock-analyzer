@@ -102,50 +102,44 @@ function initChart() {
 }
 
 async function fetchStockData(ticker) {
-    // Phương án cuối cùng và ổn định nhất: AllOrigins kết hợp Yahoo Finance
-    // AllOrigins là máy chủ trung gian duy nhất KHÔNG CHẶN tên miền của Vercel.
+    // Sử dụng API của DNSE (Entrade) - Tốc độ cực nhanh, KHÔNG bị lỗi CORS, KHÔNG giới hạn số lần tra cứu.
     let queryTicker = ticker.toUpperCase().trim();
-    if (!queryTicker.includes('.')) {
-        queryTicker += '.VN';
-    }
+    // Bỏ đuôi .VN nếu có vì DNSE chỉ dùng mã 3 chữ cái
+    queryTicker = queryTicker.replace('.VN', '');
 
     const end = Math.floor(Date.now() / 1000);
     const start = end - (365 * 24 * 60 * 60); // 1 năm
 
-    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?period1=${start}&period2=${end}&interval=1d`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+    // Link API public của DNSE
+    const targetUrl = `https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?resolution=1D&symbol=${queryTicker}&from=${start}&to=${end}`;
 
-    const response = await fetch(proxyUrl);
-    if (!response.ok) throw new Error('Kết nối mạng yếu, vui lòng nhấn Tải Biểu Đồ lại lần nữa.');
+    const response = await fetch(targetUrl);
+    if (!response.ok) throw new Error('Không thể kết nối đến máy chủ DNSE.');
     
-    const proxyData = await response.json();
-    const data = JSON.parse(proxyData.contents);
+    const data = await response.json();
     
-    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-        throw new Error(`Mã cổ phiếu "${ticker}" không tồn tại.`);
+    if (!data || !data.t || data.t.length === 0) {
+        throw new Error(`Mã cổ phiếu "${ticker}" không tồn tại trên sàn hoặc sai mã.`);
     }
 
-    const result = data.chart.result[0];
-    const timestamps = result.timestamp;
-    const quotes = result.indicators.quote[0];
-
     const chartData = [];
-    for (let i = 0; i < timestamps.length; i++) {
-        if (quotes.open[i] === null || quotes.high[i] === null || quotes.low[i] === null || quotes.close[i] === null) continue;
+    for (let i = 0; i < data.t.length; i++) {
+        if (data.o[i] === null || data.c[i] === null) continue;
         
-        const date = new Date(timestamps[i] * 1000);
+        const date = new Date(data.t[i] * 1000);
         const dateString = date.toISOString().split('T')[0];
         
         chartData.push({
             time: dateString,
-            open: quotes.open[i],
-            high: quotes.high[i],
-            low: quotes.low[i],
-            close: quotes.close[i],
-            volume: quotes.volume[i]
+            open: data.o[i],
+            high: data.h[i],
+            low: data.l[i],
+            close: data.c[i],
+            volume: data.v[i]
         });
     }
 
+    // DNSE trả về dữ liệu đã sắp xếp chuẩn, nhưng ta vẫn sort lại cho chắc chắn
     chartData.sort((a, b) => new Date(a.time) - new Date(b.time));
     return chartData;
 }
