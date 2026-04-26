@@ -98,6 +98,9 @@ function initChart() {
     // Cập nhật kích thước khi resize cửa sổ
     window.addEventListener('resize', () => {
         chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
+    });
+}
+
 async function fetchStockData(ticker) {
     // Tự động thêm đuôi .VN nếu mã VN không có dấu chấm (vì Yahoo Finance yêu cầu)
     let queryTicker = ticker.toUpperCase();
