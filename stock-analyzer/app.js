@@ -102,53 +102,57 @@ function initChart() {
 }
 
 async function fetchStockData(ticker) {
-    // Tự động thêm đuôi .VN nếu mã VN không có dấu chấm (vì Yahoo Finance yêu cầu)
-    let queryTicker = ticker.toUpperCase();
-    if (!queryTicker.includes('.')) {
-        queryTicker += '.VN';
-    }
+    // Ứng dụng đã lên Vercel (có tên miền thật), nên ta loại bỏ mọi Proxy trung gian.
+    // Kết nối thẳng vào máy chủ tài chính của sàn VNDIRECT - Tốc độ cao nhất và ổn định nhất.
+    const queryTicker = ticker.toUpperCase().trim();
+    
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(endDate.getFullYear() - 1); // Lấy 1 năm
+    
+    const endStr = endDate.toISOString().split('T')[0];
+    const startStr = startDate.toISOString().split('T')[0];
 
-    const end = Math.floor(Date.now() / 1000);
-    const start = end - (365 * 24 * 60 * 60); // 1 năm
-    
-    // Lấy từ Yahoo Finance (máy chủ ổn định nhất)
-    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${queryTicker}?period1=${start}&period2=${end}&interval=1d`;
-    
-    // Sử dụng corsproxy.io (proxy đã từng hoạt động thành công ở đầu phiên)
-    const url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    // Link API public của VNDirect
+    const url = `https://finfo-api.vndirect.com.vn/v4/stock_prices?sort=date&q=code:${queryTicker}~date:gte:${startStr}~date:lte:${endStr}&size=1000`;
 
     const response = await fetch(url);
-    if (!response.ok) throw new Error('Máy chủ từ chối kết nối. Hãy thử mở ứng dụng thông qua Live Server thay vì mở file trực tiếp.');
+    if (!response.ok) throw new Error('Máy chủ chứng khoán VNDIRECT đang bận, vui lòng thử lại sau.');
     
-    const data = await response.json();
+    const json = await response.json();
+    const dataList = json.data;
     
-    if (!data.chart.result || data.chart.result.length === 0) {
-        throw new Error(`Mã cổ phiếu "${ticker}" không tồn tại trên sàn chứng khoán.`);
+    if (!dataList || dataList.length === 0) {
+        throw new Error(`Mã cổ phiếu "${queryTicker}" không tồn tại hoặc dữ liệu bị trống.`);
     }
 
-    const result = data.chart.result[0];
-    const timestamps = result.timestamp;
-    const quotes = result.indicators.quote[0];
-
     const chartData = [];
-    for (let i = 0; i < timestamps.length; i++) {
-        if (quotes.open[i] === null || quotes.high[i] === null || quotes.low[i] === null || quotes.close[i] === null) continue;
-        
-        const date = new Date(timestamps[i] * 1000);
-        const dateString = date.toISOString().split('T')[0];
+    for (let i = 0; i < dataList.length; i++) {
+        const item = dataList[i];
         
         chartData.push({
-            time: dateString,
-            open: quotes.open[i],
-            high: quotes.high[i],
-            low: quotes.low[i],
-            close: quotes.close[i],
-            volume: quotes.volume[i]
+            time: item.date, // VNDirect trả về sẵn định dạng YYYY-MM-DD
+            open: item.adOpen,    // Giá mở cửa điều chỉnh
+            high: item.adHigh,    // Giá cao nhất điều chỉnh
+            low: item.adLow,      // Giá thấp nhất điều chỉnh
+            close: item.adClose,  // Giá đóng cửa điều chỉnh
+            volume: item.nmVolume // Khối lượng khớp lệnh
         });
     }
 
-    chartData.sort((a, b) => new Date(a.time) - new Date(b.time));
-    return chartData;
+    // Lọc bỏ ngày trùng lặp (nếu có)
+    const uniqueData = chartData.reduce((acc, current) => {
+        const x = acc.find(item => item.time === current.time);
+        if (!x) {
+            return acc.concat([current]);
+        } else {
+            return acc;
+        }
+    }, []);
+
+    // Sắp xếp tăng dần theo thời gian (VNDirect mặc định trả về giảm dần)
+    uniqueData.sort((a, b) => new Date(a.time) - new Date(b.time));
+    return uniqueData;
 }
 
 // Xử lý nút Tải biểu đồ
