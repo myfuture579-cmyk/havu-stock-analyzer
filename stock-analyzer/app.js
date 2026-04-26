@@ -102,44 +102,45 @@ function initChart() {
 }
 
 async function fetchStockData(ticker) {
-    // Sử dụng API của DNSE (Entrade) - Tốc độ cực nhanh, KHÔNG bị lỗi CORS, KHÔNG giới hạn số lần tra cứu.
+    // TCBS (Techcom Securities) là API hiếm hoi nhất hiện nay vẫn đang MỞ CORS cho các trang web public.
     let queryTicker = ticker.toUpperCase().trim();
-    // Bỏ đuôi .VN nếu có vì DNSE chỉ dùng mã 3 chữ cái
     queryTicker = queryTicker.replace('.VN', '');
 
     const end = Math.floor(Date.now() / 1000);
     const start = end - (365 * 24 * 60 * 60); // 1 năm
 
-    // Link API public của DNSE
-    const targetUrl = `https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?resolution=1D&symbol=${queryTicker}&from=${start}&to=${end}`;
+    // Link API public của TCBS
+    const targetUrl = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${queryTicker}&type=stock&resolution=D&from=${start}&to=${end}`;
 
     const response = await fetch(targetUrl);
-    if (!response.ok) throw new Error('Không thể kết nối đến máy chủ DNSE.');
+    if (!response.ok) throw new Error('Không thể kết nối đến máy chủ TCBS.');
     
-    const data = await response.json();
+    const json = await response.json();
+    const dataList = json.data;
     
-    if (!data || !data.t || data.t.length === 0) {
-        throw new Error(`Mã cổ phiếu "${ticker}" không tồn tại trên sàn hoặc sai mã.`);
+    if (!dataList || dataList.length === 0) {
+        throw new Error(`Mã cổ phiếu "${ticker}" không tồn tại hoặc sai mã.`);
     }
 
     const chartData = [];
-    for (let i = 0; i < data.t.length; i++) {
-        if (data.o[i] === null || data.c[i] === null) continue;
+    for (let i = 0; i < dataList.length; i++) {
+        const item = dataList[i];
+        if (item.open === null || item.close === null) continue;
         
-        const date = new Date(data.t[i] * 1000);
-        const dateString = date.toISOString().split('T')[0];
+        // TCBS trả về tradingDate dạng chuỗi ISO hoặc timezone, cắt lấy YYYY-MM-DD
+        const dateString = item.tradingDate.split('T')[0];
         
         chartData.push({
             time: dateString,
-            open: data.o[i],
-            high: data.h[i],
-            low: data.l[i],
-            close: data.c[i],
-            volume: data.v[i]
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            close: item.close,
+            volume: item.volume
         });
     }
 
-    // DNSE trả về dữ liệu đã sắp xếp chuẩn, nhưng ta vẫn sort lại cho chắc chắn
+    // Sắp xếp lại theo thời gian chuẩn
     chartData.sort((a, b) => new Date(a.time) - new Date(b.time));
     return chartData;
 }
